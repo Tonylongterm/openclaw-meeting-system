@@ -6,6 +6,7 @@ import string
 import time
 import uuid
 from functools import wraps
+from pathlib import Path
 
 import jwt
 from flask import Flask, request, jsonify, Response, g, send_from_directory
@@ -14,15 +15,15 @@ from flask_cors import CORS
 from agents import ParticipantAgent
 from meeting_system import MeetingRoom
 
-BASE_DIR = os.path.dirname(__file__)
-STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / 'static'
 
 
 def resolve_static_dir():
-    static_exists = os.path.isdir(STATIC_DIR)
+    static_exists = STATIC_DIR.is_dir()
     print(
-        f"[startup] cwd={os.getcwd()} base_dir={os.path.abspath(BASE_DIR)} "
-        f"static_dir={os.path.abspath(STATIC_DIR)} exists={static_exists}"
+        f"[startup] cwd={Path.cwd()} base_dir={BASE_DIR} "
+        f"static_dir={STATIC_DIR} exists={static_exists}"
     )
 
     if static_exists:
@@ -30,14 +31,14 @@ def resolve_static_dir():
 
     candidate_dirs = [
         STATIC_DIR,
-        os.path.join(os.getcwd(), 'static'),
-        os.path.join(os.path.abspath(BASE_DIR), 'static'),
-        os.path.join(os.path.dirname(os.path.abspath(BASE_DIR)), 'static'),
+        Path.cwd() / 'static',
+        BASE_DIR / 'static',
+        BASE_DIR.parent / 'static',
     ]
 
     for candidate in candidate_dirs:
-        if os.path.isdir(candidate):
-            print(f"[startup] static directory repaired: {os.path.abspath(candidate)}")
+        if candidate.is_dir():
+            print(f"[startup] static directory repaired: {candidate}")
             return candidate
 
     print("[startup] static directory not found in expected locations")
@@ -46,7 +47,7 @@ def resolve_static_dir():
 
 STATIC_DIR = resolve_static_dir()
 
-app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='/static')
+app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path='/static')
 CORS(app)
 
 SECRET_KEY = "openclaw-meeting-secret-2024"
@@ -56,6 +57,52 @@ users = {}  # email -> {email, password, name}
 meetings = {}  # meeting_id -> Meeting Object
 invite_to_meeting = {}  # invite_code -> meeting_id
 msg_queues = {}  # meeting_id -> list of queues
+
+
+def build_tree(path, max_depth=2, max_entries=50):
+    tree = {
+        "name": path.name or str(path),
+        "path": str(path),
+        "type": "dir" if path.is_dir() else "file",
+    }
+    if not path.is_dir():
+        return tree
+
+    if max_depth <= 0:
+        tree["children"] = ["... depth limit reached ..."]
+        return tree
+
+    try:
+        entries = sorted(path.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower()))
+    except Exception as exc:
+        tree["error"] = str(exc)
+        return tree
+
+    children = []
+    for index, entry in enumerate(entries):
+        if index >= max_entries:
+            children.append({"name": "... truncated ...", "path": str(path), "type": "meta"})
+            break
+        children.append(build_tree(entry, max_depth=max_depth - 1, max_entries=max_entries))
+    tree["children"] = children
+    return tree
+
+
+def send_static_page(filename):
+    static_root = Path(app.static_folder).resolve()
+    target = static_root / filename
+    if not target.is_file():
+        return jsonify({
+            "message": "Static file not found",
+            "filename": filename,
+            "cwd": str(Path.cwd()),
+            "base_dir": str(BASE_DIR),
+            "static_folder": str(static_root),
+            "target": str(target),
+            "static_folder_exists": static_root.is_dir(),
+            "available_files": sorted(item.name for item in static_root.iterdir()) if static_root.is_dir() else [],
+        }), 500
+    return send_from_directory(str(static_root), filename)
 
 def generate_invite_code():
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
@@ -307,13 +354,44 @@ def join_meeting():
     else:
         return jsonify({"success": False, "message": "Name already taken"}), 400
 
+
+def health_payload():
+    static_root = Path(app.static_folder).resolve()
+    return {
+        "status": "ok",
+        "cwd": str(Path.cwd()),
+        "base_dir": str(BASE_DIR),
+        "static_folder": str(static_root),
+        "static_exists": static_root.is_dir(),
+        "index_exists": (static_root / 'index.html').is_file(),
+        "app_exists": (static_root / 'app.html').is_file(),
+    }
+
+
+@app.route('/api/health', methods=['GET'])
+@app.route('/api/meeting/status', methods=['GET'])
+def healthcheck():
+    return jsonify(health_payload())
+
+
+@app.route('/debug/ls', methods=['GET'])
+def debug_ls():
+    current_path = Path.cwd().resolve()
+    parents = [current_path, *current_path.parents]
+    return jsonify({
+        "cwd": str(current_path),
+        "base_dir": str(BASE_DIR),
+        "static_folder": str(Path(app.static_folder).resolve()),
+        "levels": [build_tree(path, max_depth=2, max_entries=50) for path in parents],
+    })
+
 @app.route('/')
 def index():
-    return send_from_directory(app.static_folder, 'index.html')
+    return send_static_page('index.html')
 
 @app.route('/app')
 def app_page():
-    return send_from_directory(app.static_folder, 'app.html')
+    return send_static_page('app.html')
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 7788))

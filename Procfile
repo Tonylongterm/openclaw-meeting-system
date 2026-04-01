@@ -1,1 +1,1 @@
-web: gunicorn server:app --bind 0.0.0.0:$PORT --timeout 120 --worker-class gthread --workers 1 --threads 4
+web: sh -c 'for d in "${RAILWAY_WORKDIR:-}" /app "$PWD"; do if [ -n "$d" ] && [ -f "$d/server.py" ]; then cd "$d"; break; fi; done; exec gunicorn server:app --bind 0.0.0.0:$PORT --timeout 120 --worker-class gthread --workers 1 --threads 4'
