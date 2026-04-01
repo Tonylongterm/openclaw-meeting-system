@@ -923,20 +923,47 @@ curl -X POST /api/join \
         function closeCreateModal() { document.getElementById('modal-create').classList.add('hidden'); }
 
         async function handleCreateMeeting() {
-            const title = document.getElementById('new-title').value;
-            const topic = document.getElementById('new-topic').value;
-            const max_rounds = document.getElementById('new-rounds').value;
+            alert('DEBUG: 开始创建');
+            const title = document.getElementById('new-title').value.trim();
+            const topic = document.getElementById('new-topic').value.trim();
+            const maxRoundsValue = document.getElementById('new-rounds').value;
+            const max_rounds = Number.parseInt(maxRoundsValue, 10);
 
-            if(!title || !topic) return alert('请填写会议名称和议题');
+            if (!title || !topic) return alert('请填写会议名称和议题');
+            if (!Number.isInteger(max_rounds) || max_rounds < 1) return alert('最大讨论轮数必须是大于 0 的整数');
 
-            const res = await fetch(`${API_BASE}/api/meetings`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
-                body: JSON.stringify({title, topic, max_rounds})
-            });
-            if (res.ok) {
+            try {
+                alert('DEBUG: 准备发送请求');
+                const res = await fetch(`${API_BASE}/api/meetings`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+                    body: JSON.stringify({title, topic, max_rounds})
+                });
+
+                let data = {};
+                try {
+                    data = await res.json();
+                } catch (e) {}
+
+                if (res.status === 401) {
+                    alert(data.message || '登录已失效，请重新登录');
+                    logout();
+                    return;
+                }
+
+                if (!res.ok) {
+                    alert(data.message || '创建会议失败');
+                    return;
+                }
+
                 closeCreateModal();
-                loadMeetings();
+                document.getElementById('new-title').value = '';
+                document.getElementById('new-topic').value = '';
+                document.getElementById('new-rounds').value = '5';
+                await loadMeetings();
+            } catch (e) {
+                console.error('Failed to create meeting:', e);
+                alert('网络错误，创建会议失败');
             }
         }
 
@@ -1108,6 +1135,8 @@ curl -X POST /api/join \
 </html>
 '''
 
+print(f"[startup] APP_HTML length={len(APP_HTML)}")
+
 # In-memory storage
 users = {}  # email -> {email, password, name}
 meetings = {}  # meeting_id -> Meeting Object
@@ -1215,10 +1244,20 @@ def get_me():
 @app.route('/api/meetings', methods=['POST'])
 @token_required
 def create_meeting():
-    data = request.json
-    title = data.get('title')
-    topic = data.get('topic')
-    max_rounds = int(data.get('max_rounds', 5))
+    data = request.get_json(silent=True) or {}
+    title = (data.get('title') or '').strip()
+    topic = (data.get('topic') or '').strip()
+
+    if not title or not topic:
+        return jsonify({"success": False, "message": "Missing required fields: title and topic"}), 400
+
+    try:
+        max_rounds = int(data.get('max_rounds', 5))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "max_rounds must be an integer"}), 400
+
+    if max_rounds < 1:
+        return jsonify({"success": False, "message": "max_rounds must be greater than 0"}), 400
 
     meeting_id = str(uuid.uuid4())
     invite_code = generate_invite_code()
