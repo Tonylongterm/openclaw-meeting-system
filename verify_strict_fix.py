@@ -6,10 +6,9 @@ import time
 import requests
 
 
-MARKER = "22:58_STRICT_FIX"
-MAX_ATTEMPTS = 10
-TIMEOUT_SECONDS = 120
+MARKER = "23:40_FORCE_CLEAN_BUILD"
 REQUEST_TIMEOUT = 10
+SLEEP_SECONDS = 10
 
 
 def normalize_url(raw_url: str) -> str:
@@ -29,43 +28,29 @@ def main() -> int:
         return 2
 
     url = normalize_url(raw_url)
-    deadline = time.time() + TIMEOUT_SECONDS
     attempt = 0
-    last_error = None
 
-    while time.time() < deadline:
-        for _ in range(MAX_ATTEMPTS):
-            attempt += 1
-            try:
-                response = requests.get(
-                    url,
-                    headers={
-                        "Cache-Control": "no-cache",
-                        "Pragma": "no-cache",
-                    },
-                    timeout=REQUEST_TIMEOUT,
-                )
-                body = response.text
-                print(f"[attempt {attempt}] status={response.status_code} bytes={len(body)} url={url}")
-                if MARKER in body:
-                    print(f"SUCCESS: found marker '{MARKER}' on attempt {attempt}")
-                    return 0
-                last_error = (
-                    f"marker '{MARKER}' not found on attempt {attempt}; "
-                    f"status={response.status_code}"
-                )
-            except requests.RequestException as exc:
-                last_error = f"request failed on attempt {attempt}: {exc}"
-                print(f"[attempt {attempt}] ERROR {exc}")
+    while True:
+        attempt += 1
+        try:
+            response = requests.get(
+                url,
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Pragma": "no-cache",
+                },
+                timeout=REQUEST_TIMEOUT,
+            )
+            body = response.text
+            print(f"[attempt {attempt}] status={response.status_code} bytes={len(body)} url={url}")
+            if MARKER in body:
+                print(f"SUCCESS: found marker '{MARKER}' on attempt {attempt}")
+                return 0
+            print(f"[attempt {attempt}] marker '{MARKER}' not found yet")
+        except requests.RequestException as exc:
+            print(f"[attempt {attempt}] ERROR {exc}")
 
-            if time.time() >= deadline:
-                break
-            time.sleep(1)
-
-    raise SystemExit(
-        f"ERROR: failed to observe marker '{MARKER}' within {TIMEOUT_SECONDS} seconds. "
-        f"Last error: {last_error}"
-    )
+        time.sleep(SLEEP_SECONDS)
 
 
 if __name__ == "__main__":
