@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenClaw 会议控制台</title>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --panel-bg: #161b22;
+            --border-color: #30363d;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --accent-color: #58a6ff;
+            --success-color: #238636;
+            --danger-color: #da3633;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* 左侧面板 */
+        .sidebar {
+            width: 300px;
+            background-color: var(--panel-bg);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        .sidebar h2 {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            color: var(--accent-color);
+        }
+
+        .agent-list {
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+
+        .agent-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            background: #21262d;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+
+        .agent-avatar {
+            font-size: 1.5rem;
+            margin-right: 10px;
+        }
+
+        .agent-info .name {
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+
+        .agent-info .role {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .meeting-status {
+            margin-top: 20px;
+            padding: 15px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            background: #238636;
+            color: white;
+        }
+
+        /* 主区域 */
+        .main-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .header {
+            padding: 15px 25px;
+            background-color: var(--panel-bg);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header .topic {
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        .message-flow {
+            flex-grow: 1;
+            padding: 25px;
+            overflow-y: auto;
+            scroll-behavior: smooth;
+        }
+
+        .message-item {
+            margin-bottom: 20px;
+            animation: fadeIn 0.3s ease-out;
+            max-width: 80%;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .message-header .name {
+            font-weight: bold;
+            margin-right: 10px;
+            font-size: 0.9rem;
+        }
+
+        .message-header .role {
+            font-size: 0.75rem;
+            background: #30363d;
+            padding: 1px 6px;
+            border-radius: 4px;
+            color: var(--text-secondary);
+        }
+
+        .message-content {
+            background-color: #21262d;
+            padding: 12px 16px;
+            border-radius: 0 12px 12px 12px;
+            border: 1px solid var(--border-color);
+            line-height: 1.5;
+            font-size: 0.95rem;
+            white-space: pre-wrap;
+        }
+
+        .round-divider {
+            text-align: center;
+            margin: 30px 0;
+            position: relative;
+        }
+
+        .round-divider::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 50%;
+            width: 100%;
+            height: 1px;
+            background: var(--border-color);
+            z-index: 1;
+        }
+
+        .round-divider span {
+            position: relative;
+            background: var(--bg-color);
+            padding: 0 15px;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            z-index: 2;
+        }
+
+        /* 底部控制栏 */
+        .controls {
+            padding: 15px 25px;
+            background-color: var(--panel-bg);
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        select, input, button {
+            background-color: #0d1117;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        button {
+            cursor: pointer;
+            background-color: var(--success-color);
+            color: white;
+            border: none;
+            font-weight: 600;
+            transition: opacity 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.8;
+        }
+
+        button:disabled {
+            background-color: var(--text-secondary);
+            cursor: not-allowed;
+        }
+
+        .conclude-banner {
+            background: rgba(35, 134, 54, 0.1);
+            border: 1px solid var(--success-color);
+            color: #3fb950;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        /* 颜色方案 */
+        .color-0 { border-left: 4px solid #ff7b72; }
+        .color-1 { border-left: 4px solid #79c0ff; }
+        .color-2 { border-left: 4px solid #d2a8ff; }
+        .color-3 { border-left: 4px solid #ffa657; }
+        .color-4 { border-left: 4px solid #7ee787; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h2>已注册 Agent</h2>
+        <div class="agent-list" id="agentList">
+            <!-- Agent items here -->
+        </div>
+        <div class="meeting-status">
+            <div>状态: <span id="statusBadge" class="status-badge" style="background:#8b949e">未创建</span></div>
+            <div id="roundInfo" style="margin-top:5px; font-size:0.9rem">轮次: 0 / 0</div>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="header">
+            <div class="topic" id="meetingTopic">等待创建会议...</div>
+            <div id="meetingId" style="color:var(--text-secondary); font-size:0.8rem"></div>
+        </div>
+        <div class="message-flow" id="messageFlow">
+            <!-- Messages here -->
+        </div>
+        <div class="controls">
+            <input type="text" id="topicInput" placeholder="会议主题" value="关于未来 AI 架构的讨论">
+            <input type="number" id="roundsInput" value="5" style="width: 50px" title="最大轮数">
+            <button onclick="createMeeting()">创建会议</button>
+            <select id="hostSelect">
+                <option value="">选择主持人</option>
+            </select>
+            <button onclick="startMeeting()" id="startBtn" disabled>开始会议</button>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        let eventSource = null;
+        const agentColors = {};
+        let colorIndex = 0;
+
+        async function fetchStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/api/meeting/status`);
+                const data = await res.json();
+                updateUI(data);
+            } catch (e) { console.error(e); }
+        }
+
+        function updateUI(data) {
+            // Update Agents
+            const list = document.getElementById('agentList');
+            const select = document.getElementById('hostSelect');
+            const currentHost = select.value;
+            
+            list.innerHTML = '';
+            select.innerHTML = '<option value="">选择主持人</option>';
+            
+            data.agents.forEach(agent => {
+                if (!agentColors[agent.name]) {
+                    agentColors[agent.name] = `color-${colorIndex % 5}`;
+                    colorIndex++;
+                }
+                
+                const item = document.createElement('div');
+                item.className = 'agent-item';
+                item.innerHTML = `
+                    <div class="agent-avatar">${getEmoji(agent.role)}</div>
+                    <div class="agent-info">
+                        <div class="name">${agent.name}</div>
+                        <div class="role">${agent.role}</div>
+                    </div>
+                `;
+                list.appendChild(item);
+
+                const opt = document.createElement('option');
+                opt.value = agent.name;
+                opt.textContent = agent.name;
+                if (agent.name === data.moderator) opt.selected = true;
+                select.appendChild(opt);
+            });
+
+            // Update Status
+            const badge = document.getElementById('statusBadge');
+            badge.textContent = data.status || '未创建';
+            if (data.status === 'running') badge.style.background = '#238636';
+            else if (data.status === 'finished') badge.style.background = '#da3633';
+            
+            document.getElementById('meetingTopic').textContent = data.topic || '等待创建会议...';
+            document.getElementById('roundInfo').textContent = `轮次: ${data.current_round || 0} / ${data.max_rounds || 0}`;
+            
+            document.getElementById('startBtn').disabled = !data.topic || data.status === 'running' || data.status === 'finished';
+        }
+
+        function getEmoji(role) {
+            if (role.includes('产品')) return '📋';
+            if (role.includes('架构')) return '🏗️';
+            if (role.includes('前端')) return '🎨';
+            if (role.includes('后端')) return '⚙️';
+            return '🤖';
+        }
+
+        async function createMeeting() {
+            const topic = document.getElementById('topicInput').value;
+            const rounds = parseInt(document.getElementById('roundsInput').value);
+            
+            const res = await fetch(`${API_BASE}/api/meeting/create`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({topic, max_rounds: rounds})
+            });
+            const data = await res.json();
+            if (data.success) {
+                fetchStatus();
+                setupSSE();
+                document.getElementById('messageFlow').innerHTML = '';
+            }
+        }
+
+        async function startMeeting() {
+            const host = document.getElementById('hostSelect').value;
+            if (!host) return alert('请先选择主持人');
+
+            await fetch(`${API_BASE}/api/meeting/set_host`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({agent_name: host})
+            });
+
+            const res = await fetch(`${API_BASE}/api/meeting/start`, {method: 'POST'});
+            const data = await res.json();
+            if (data.success) fetchStatus();
+        }
+
+        function setupSSE() {
+            if (eventSource) eventSource.close();
+            eventSource = new EventSource(`${API_BASE}/api/meeting/stream`);
+            
+            eventSource.onmessage = function(e) {
+                const data = JSON.parse(e.data);
+                handleMessage(data);
+            };
+        }
+
+        function handleMessage(data) {
+            const flow = document.getElementById('messageFlow');
+            
+            if (data.type === 'speech') {
+                const msg = document.createElement('div');
+                msg.className = `message-item ${agentColors[data.agent] || ''}`;
+                msg.innerHTML = `
+                    <div class="message-header">
+                        <span class="name">${data.agent}</span>
+                        <span class="role">${data.role}</span>
+                    </div>
+                    <div class="message-content">${data.content}</div>
+                `;
+                flow.appendChild(msg);
+            } else if (data.type === 'round_start') {
+                const div = document.createElement('div');
+                div.className = 'round-divider';
+                div.innerHTML = `<span>第 ${data.round} 轮发言开始</span>`;
+                flow.appendChild(div);
+            } else if (data.type === 'meeting_end') {
+                const div = document.createElement('div');
+                div.className = 'conclude-banner';
+                div.textContent = `会议结束：${data.reason}`;
+                flow.appendChild(div);
+                fetchStatus();
+            } else if (data.type === 'agent_registered') {
+                fetchStatus();
+            }
+            
+            flow.scrollTop = flow.scrollHeight;
+            
+            // Increment rounds in UI if needed
+            if (data.round) {
+                const rInfo = document.getElementById('roundInfo');
+                const parts = rInfo.textContent.split(' / ');
+                rInfo.textContent = `轮次: ${data.round} / ${parts[1]}`;
+            }
+        }
+
+        // Init
+        fetchStatus();
+        setupSSE();
+        setInterval(fetchStatus, 5000);
+    </script>
+</body>
+</html>
