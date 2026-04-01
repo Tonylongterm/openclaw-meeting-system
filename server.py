@@ -1,19 +1,50 @@
-from flask import Flask, request, jsonify, Response, g, send_from_directory
-from flask_cors import CORS
-import json
-import uuid
-import queue
-import time
-import jwt
 import os
+import json
+import queue
 import random
 import string
+import time
+import uuid
 from functools import wraps
+
+import jwt
+from flask import Flask, request, jsonify, Response, g, send_from_directory
+from flask_cors import CORS
+
 from agents import ParticipantAgent
 from meeting_system import MeetingRoom
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-STATIC_DIR = os.path.join(BASE_DIR, 'static')
+BASE_DIR = os.path.dirname(__file__)
+STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
+
+
+def resolve_static_dir():
+    static_exists = os.path.isdir(STATIC_DIR)
+    print(
+        f"[startup] cwd={os.getcwd()} base_dir={os.path.abspath(BASE_DIR)} "
+        f"static_dir={os.path.abspath(STATIC_DIR)} exists={static_exists}"
+    )
+
+    if static_exists:
+        return STATIC_DIR
+
+    candidate_dirs = [
+        STATIC_DIR,
+        os.path.join(os.getcwd(), 'static'),
+        os.path.join(os.path.abspath(BASE_DIR), 'static'),
+        os.path.join(os.path.dirname(os.path.abspath(BASE_DIR)), 'static'),
+    ]
+
+    for candidate in candidate_dirs:
+        if os.path.isdir(candidate):
+            print(f"[startup] static directory repaired: {os.path.abspath(candidate)}")
+            return candidate
+
+    print("[startup] static directory not found in expected locations")
+    return STATIC_DIR
+
+
+STATIC_DIR = resolve_static_dir()
 
 app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='/static')
 CORS(app)
