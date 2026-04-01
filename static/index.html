@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenClaw 会议控制台</title>
+    <title>🦞 OpenClaw 多 Agent 会议系统 V2</title>
     <style>
         :root {
             --bg-color: #0d1117;
@@ -14,6 +14,7 @@
             --accent-color: #58a6ff;
             --success-color: #238636;
             --danger-color: #da3633;
+            --warning-color: #d29922;
         }
 
         body {
@@ -21,407 +22,502 @@
             background-color: var(--bg-color);
             color: var(--text-primary);
             margin: 0;
-            display: flex;
+            padding: 0;
             height: 100vh;
             overflow: hidden;
         }
 
-        /* 左侧面板 */
-        .sidebar {
-            width: 300px;
-            background-color: var(--panel-bg);
-            border-right: 1px solid var(--border-color);
-            display: flex;
-            flex-direction: column;
-            padding: 20px;
+        /* 基础样式 */
+        button { cursor: pointer; border: none; border-radius: 6px; padding: 8px 16px; font-weight: 600; transition: 0.2s; }
+        button:hover { opacity: 0.8; }
+        input, select, textarea { 
+            background: #0d1117; border: 1px solid var(--border-color); color: var(--text-primary); 
+            padding: 8px; border-radius: 6px; outline: none; 
+        }
+        input:focus, textarea:focus { border-color: var(--accent-color); }
+
+        /* 页面切换逻辑 */
+        .page { display: none; height: 100%; flex-direction: column; }
+        .page.active { display: flex; }
+
+        /* 登录/注册页 */
+        .auth-container { 
+            max-width: 400px; margin: 100px auto; padding: 40px; 
+            background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        }
+        .auth-tabs { display: flex; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); }
+        .auth-tab { flex: 1; text-align: center; padding: 10px; cursor: pointer; color: var(--text-secondary); }
+        .auth-tab.active { color: var(--accent-color); border-bottom: 2px solid var(--accent-color); }
+        .auth-form { display: flex; flex-direction: column; gap: 15px; }
+        .auth-form .btn-primary { background: var(--accent-color); color: white; }
+
+        /* 顶部导航 */
+        .navbar { 
+            height: 60px; background: var(--panel-bg); border-bottom: 1px solid var(--border-color);
+            display: flex; justify-content: space-between; align-items: center; padding: 0 20px;
+        }
+        .nav-logo { font-size: 1.5rem; font-weight: bold; color: var(--accent-color); text-decoration: none; }
+        .nav-user { display: flex; align-items: center; gap: 15px; }
+
+        /* 会议列表 */
+        .list-container { flex: 1; overflow-y: auto; padding: 30px; max-width: 1000px; margin: 0 auto; width: 100%; }
+        .list-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+        .list-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+        .meeting-card { 
+            background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 10px; padding: 20px;
+            display: flex; flex-direction: column; gap: 12px; cursor: pointer; transition: 0.2s;
+        }
+        .meeting-card:hover { transform: translateY(-3px); border-color: var(--accent-color); }
+        .card-title { font-size: 1.1rem; font-weight: bold; }
+        .card-meta { font-size: 0.85rem; color: var(--text-secondary); display: flex; gap: 15px; }
+        .invite-badge { 
+            background: #21262d; border: 1px dashed var(--accent-color); color: var(--accent-color); 
+            padding: 5px 10px; border-radius: 4px; font-family: monospace; font-weight: bold; font-size: 1.1rem;
+        }
+        .status-pill { padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; color: white; }
+
+        /* 会议控制台 */
+        .console-container { flex: 1; display: flex; height: calc(100% - 60px); }
+        .sidebar { width: 350px; background: var(--panel-bg); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; overflow-y: auto; }
+        .sidebar-section { padding: 20px; border-bottom: 1px solid var(--border-color); }
+        .sidebar-title { font-size: 0.9rem; font-weight: bold; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 15px; }
+        .agent-list { display: flex; flex-direction: column; gap: 10px; }
+        .agent-item { 
+            display: flex; align-items: center; gap: 10px; background: #21262d; 
+            padding: 10px; border-radius: 6px; border: 1px solid var(--border-color);
+        }
+        .agent-avatar { font-size: 1.4rem; }
+        .agent-name { font-weight: bold; font-size: 0.9rem; }
+        .agent-role { font-size: 0.75rem; color: var(--text-secondary); }
+
+        .main-panel { flex: 1; display: flex; flex-direction: column; background: var(--bg-color); }
+        .stream-flow { flex: 1; overflow-y: auto; padding: 30px; scroll-behavior: smooth; }
+        .bottom-bar { 
+            padding: 20px; background: var(--panel-bg); border-top: 1px solid var(--border-color);
+            display: flex; justify-content: center; align-items: center;
         }
 
-        .sidebar h2 {
-            font-size: 1.2rem;
-            margin-bottom: 20px;
-            color: var(--accent-color);
-        }
+        /* 消息样式 */
+        .msg-item { margin-bottom: 25px; animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+        .msg-header { display: flex; gap: 10px; align-items: center; margin-bottom: 6px; }
+        .msg-author { font-weight: bold; font-size: 0.95rem; }
+        .msg-tag { font-size: 0.7rem; background: #30363d; padding: 2px 6px; border-radius: 4px; color: var(--text-secondary); }
+        .msg-content { background: #21262d; border: 1px solid var(--border-color); padding: 12px 16px; border-radius: 0 12px 12px 12px; line-height: 1.6; font-size: 0.95rem; }
+        .msg-divider { text-align: center; margin: 40px 0; border-top: 1px solid var(--border-color); position: relative; }
+        .msg-divider span { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: var(--bg-color); padding: 0 15px; font-size: 0.8rem; color: var(--text-secondary); }
 
-        .agent-list {
-            flex-grow: 1;
-            overflow-y: auto;
-        }
+        /* 抽屉/代码块 */
+        .code-block { background: #000; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 0.85rem; overflow-x: auto; color: #a5d6ff; margin-top: 10px; }
 
-        .agent-item {
-            display: flex;
-            align-items: center;
-            padding: 10px;
-            background: #21262d;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            margin-bottom: 10px;
-        }
-
-        .agent-avatar {
-            font-size: 1.5rem;
-            margin-right: 10px;
-        }
-
-        .agent-info .name {
-            font-weight: bold;
-            font-size: 0.9rem;
-        }
-
-        .agent-info .role {
-            font-size: 0.8rem;
-            color: var(--text-secondary);
-        }
-
-        .meeting-status {
-            margin-top: 20px;
-            padding: 15px;
-            border-top: 1px solid var(--border-color);
-        }
-
-        .status-badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 0.75rem;
-            background: #238636;
-            color: white;
-        }
-
-        /* 主区域 */
-        .main-content {
-            flex-grow: 1;
-            display: flex;
-            flex-direction: column;
-            position: relative;
-        }
-
-        .header {
-            padding: 15px 25px;
-            background-color: var(--panel-bg);
-            border-bottom: 1px solid var(--border-color);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .header .topic {
-            font-size: 1.2rem;
-            font-weight: bold;
-        }
-
-        .message-flow {
-            flex-grow: 1;
-            padding: 25px;
-            overflow-y: auto;
-            scroll-behavior: smooth;
-        }
-
-        .message-item {
-            margin-bottom: 20px;
-            animation: fadeIn 0.3s ease-out;
-            max-width: 80%;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .message-header {
-            display: flex;
-            align-items: center;
-            margin-bottom: 5px;
-        }
-
-        .message-header .name {
-            font-weight: bold;
-            margin-right: 10px;
-            font-size: 0.9rem;
-        }
-
-        .message-header .role {
-            font-size: 0.75rem;
-            background: #30363d;
-            padding: 1px 6px;
-            border-radius: 4px;
-            color: var(--text-secondary);
-        }
-
-        .message-content {
-            background-color: #21262d;
-            padding: 12px 16px;
-            border-radius: 0 12px 12px 12px;
-            border: 1px solid var(--border-color);
-            line-height: 1.5;
-            font-size: 0.95rem;
-            white-space: pre-wrap;
-        }
-
-        .round-divider {
-            text-align: center;
-            margin: 30px 0;
-            position: relative;
-        }
-
-        .round-divider::before {
-            content: "";
-            position: absolute;
-            left: 0;
-            top: 50%;
-            width: 100%;
-            height: 1px;
-            background: var(--border-color);
-            z-index: 1;
-        }
-
-        .round-divider span {
-            position: relative;
-            background: var(--bg-color);
-            padding: 0 15px;
-            color: var(--text-secondary);
-            font-size: 0.8rem;
-            z-index: 2;
-        }
-
-        /* 底部控制栏 */
-        .controls {
-            padding: 15px 25px;
-            background-color: var(--panel-bg);
-            border-top: 1px solid var(--border-color);
-            display: flex;
-            gap: 15px;
-            align-items: center;
-        }
-
-        select, input, button {
-            background-color: #0d1117;
-            border: 1px solid var(--border-color);
-            color: var(--text-primary);
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-size: 0.9rem;
-        }
-
-        button {
-            cursor: pointer;
-            background-color: var(--success-color);
-            color: white;
-            border: none;
-            font-weight: 600;
-            transition: opacity 0.2s;
-        }
-
-        button:hover {
-            opacity: 0.8;
-        }
-
-        button:disabled {
-            background-color: var(--text-secondary);
-            cursor: not-allowed;
-        }
-
-        .conclude-banner {
-            background: rgba(35, 134, 54, 0.1);
-            border: 1px solid var(--success-color);
-            color: #3fb950;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 20px 0;
-            text-align: center;
-            font-weight: bold;
-        }
-
-        /* 颜色方案 */
-        .color-0 { border-left: 4px solid #ff7b72; }
-        .color-1 { border-left: 4px solid #79c0ff; }
-        .color-2 { border-left: 4px solid #d2a8ff; }
-        .color-3 { border-left: 4px solid #ffa657; }
-        .color-4 { border-left: 4px solid #7ee787; }
+        .hidden { display: none; }
     </style>
 </head>
 <body>
-    <div class="sidebar">
-        <h2>已注册 Agent</h2>
-        <div class="agent-list" id="agentList">
-            <!-- Agent items here -->
-        </div>
-        <div class="meeting-status">
-            <div>状态: <span id="statusBadge" class="status-badge" style="background:#8b949e">未创建</span></div>
-            <div id="roundInfo" style="margin-top:5px; font-size:0.9rem">轮次: 0 / 0</div>
+
+    <!-- 登录页 -->
+    <div id="page-auth" class="page active">
+        <div class="auth-container">
+            <h1 style="text-align: center; color: var(--accent-color);">🦞 OpenClaw</h1>
+            <div class="auth-tabs">
+                <div class="auth-tab active" onclick="switchAuthTab('login')">登录</div>
+                <div class="auth-tab" onclick="switchAuthTab('register')">注册</div>
+            </div>
+            
+            <div id="auth-login" class="auth-form">
+                <input type="email" id="login-email" placeholder="Gmail 地址 (example@gmail.com)">
+                <input type="password" id="login-password" placeholder="密码">
+                <button class="btn-primary" onclick="handleLogin()">立即登录</button>
+            </div>
+
+            <div id="auth-register" class="auth-form hidden">
+                <input type="text" id="reg-name" placeholder="您的姓名">
+                <input type="email" id="reg-email" placeholder="Gmail 地址">
+                <input type="password" id="reg-password" placeholder="设置密码">
+                <button class="btn-primary" onclick="handleRegister()" style="background: var(--success-color);">创建账户</button>
+            </div>
         </div>
     </div>
 
-    <div class="main-content">
-        <div class="header">
-            <div class="topic" id="meetingTopic">等待创建会议...</div>
-            <div id="meetingId" style="color:var(--text-secondary); font-size:0.8rem"></div>
+    <!-- 列表页 -->
+    <div id="page-list" class="page">
+        <div class="navbar">
+            <a href="#" class="nav-logo">🦞 OpenClaw Meeting System</a>
+            <div class="nav-user">
+                <span id="display-user-name">...</span>
+                <button onclick="logout()" style="background: transparent; color: var(--danger-color); border: 1px solid var(--danger-color);">退出</button>
+            </div>
         </div>
-        <div class="message-flow" id="messageFlow">
-            <!-- Messages here -->
+        <div class="list-container">
+            <div class="list-header">
+                <h2>我的会议</h2>
+                <button onclick="showCreateModal()" style="background: var(--accent-color); color: white;">+ 新建会议</button>
+            </div>
+            <div id="meeting-grid" class="list-grid">
+                <!-- 动态渲染 -->
+            </div>
         </div>
-        <div class="controls">
-            <input type="text" id="topicInput" placeholder="会议主题" value="关于未来 AI 架构的讨论">
-            <input type="number" id="roundsInput" value="5" style="width: 50px" title="最大轮数">
-            <button onclick="createMeeting()">创建会议</button>
-            <select id="hostSelect">
-                <option value="">选择主持人</option>
-            </select>
-            <button onclick="startMeeting()" id="startBtn" disabled>开始会议</button>
+    </div>
+
+    <!-- 详情/控制台页 -->
+    <div id="page-detail" class="page">
+        <div class="navbar">
+            <div style="display:flex; align-items:center; gap:20px;">
+                <button onclick="goBack()" style="background:transparent; color:var(--text-secondary);">← 返回</button>
+                <h2 id="detail-title" style="margin:0">会议详情</h2>
+            </div>
+            <div class="nav-user">
+                <span class="invite-badge" id="detail-invite-code">......</span>
+                <button onclick="copyInvite()" style="background:var(--accent-color); padding:4px 8px; font-size:0.8rem">复制邀请码</button>
+            </div>
+        </div>
+        <div class="console-container">
+            <div class="sidebar">
+                <div class="sidebar-section">
+                    <div class="sidebar-title">会议设置</div>
+                    <div style="display:flex; flex-direction:column; gap:10px;">
+                        <label style="font-size:0.8rem; color:var(--text-secondary)">讨论主题</label>
+                        <textarea id="set-topic" rows="3"></textarea>
+                        <div style="display:flex; align-items:center; justify-content:space-between">
+                            <label style="font-size:0.8rem; color:var(--text-secondary)">最大轮数</label>
+                            <input type="number" id="set-rounds" style="width:50px">
+                        </div>
+                        <label style="font-size:0.8rem; color:var(--text-secondary)">主持人选择</label>
+                        <select id="set-host">
+                            <option value="">等待龙虾加入...</option>
+                        </select>
+                        <button onclick="saveSettings()" style="background:#30363d; margin-top:5px">保存设置</button>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <div class="sidebar-title" style="display:flex; justify-content:space-between">
+                        <span>龙虾加入代码</span>
+                        <a href="javascript:void(0)" onclick="toggleCode()" style="font-size:0.7rem; color:var(--accent-color)">展开/收起</a>
+                    </div>
+                    <div id="join-code-box" class="code-block hidden">
+curl -X POST /api/join \
+-H "Content-Type: application/json" \
+-d '{
+  "invite_code": "<span class="invite-placeholder">...</span>",
+  "name": "我的名",
+  "role": "我的角色",
+  "description": "介绍"
+}'
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <div class="sidebar-title">已加入 Agent (<span id="agent-count">0</span>)</div>
+                    <div id="agent-list" class="agent-list">
+                        <!-- 动态渲染 -->
+                    </div>
+                </div>
+            </div>
+            
+            <div class="main-panel">
+                <div id="stream-flow" class="stream-flow">
+                    <!-- 实时消息流 -->
+                </div>
+                <div id="detail-controls" class="bottom-bar">
+                    <button id="btn-start-meeting" onclick="startMeeting()" style="background:var(--success-color); color:white; width:200px; padding:12px; font-size:1.1rem">开始会议</button>
+                    <div id="meeting-running-hint" class="hidden" style="color:var(--warning-color); font-weight:bold;">✨ 会议正在进行中...</div>
+                    <div id="meeting-finished-hint" class="hidden" style="color:var(--text-secondary); font-weight:bold;">🏁 会议已结束</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新建会议 Modal (简易 Alert 实现) -->
+    <div id="modal-create" class="hidden" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:1000; display:flex; align-items:center; justify-content:center;">
+        <div style="background:var(--panel-bg); border:1px solid var(--border-color); border-radius:12px; padding:30px; width:400px; display:flex; flex-direction:column; gap:20px;">
+            <h3>新建会议</h3>
+            <input type="text" id="new-title" placeholder="会议名称">
+            <textarea id="new-topic" placeholder="讨论的主题详细说明" rows="4"></textarea>
+            <input type="number" id="new-rounds" placeholder="最大轮数" value="5">
+            <div style="display:flex; gap:10px; justify-content:flex-end;">
+                <button onclick="closeCreateModal()" style="background:transparent; color:var(--text-secondary)">取消</button>
+                <button onclick="handleCreateMeeting()" style="background:var(--accent-color); color:white">创建</button>
+            </div>
         </div>
     </div>
 
     <script>
         const API_BASE = window.location.origin;
-        let eventSource = null;
-        const agentColors = {};
-        let colorIndex = 0;
+        let currentUser = null;
+        let token = localStorage.getItem('token');
+        let currentMeetingId = null;
+        let sse = null;
 
-        async function fetchStatus() {
-            try {
-                const res = await fetch(`${API_BASE}/api/meeting/status`);
-                const data = await res.json();
-                updateUI(data);
-            } catch (e) { console.error(e); }
+        // --- Auth 逻辑 ---
+        function switchAuthTab(tab) {
+            document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.auth-form').forEach(f => f.classList.add('hidden'));
+            document.querySelector(`.auth-tab:nth-child(${tab === 'login' ? 1 : 2})`).classList.add('active');
+            document.getElementById(`auth-${tab}`).classList.remove('hidden');
         }
 
-        function updateUI(data) {
-            // Update Agents
-            const list = document.getElementById('agentList');
-            const select = document.getElementById('hostSelect');
-            const currentHost = select.value;
+        async function handleRegister() {
+            const email = document.getElementById('reg-email').value;
+            const password = document.getElementById('reg-password').value;
+            const name = document.getElementById('reg-name').value;
+            try {
+                const res = await fetch(`${API_BASE}/api/auth/register`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({email, password, name})
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    alert('注册成功，请登录');
+                    switchAuthTab('login');
+                } else alert(data.message);
+            } catch (e) { alert('网络错误'); }
+        }
+
+        async function handleLogin() {
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            try {
+                const res = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({email, password})
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    token = data.token;
+                    currentUser = data.user;
+                    localStorage.setItem('token', token);
+                    showPage('list');
+                    loadMeetings();
+                } else alert(data.message);
+            } catch (e) { alert('登录失败'); }
+        }
+
+        function logout() {
+            localStorage.removeItem('token');
+            token = null;
+            showPage('auth');
+        }
+
+        // --- 会议列表 ---
+        async function loadMeetings() {
+            const res = await fetch(`${API_BASE}/api/meetings`, {
+                headers: {'Authorization': `Bearer ${token}`}
+            });
+            if (res.status === 401) return logout();
+            const meetings = await res.json();
+            const grid = document.getElementById('meeting-grid');
+            grid.innerHTML = '';
+            meetings.forEach(m => {
+                const card = document.createElement('div');
+                card.className = 'meeting-card';
+                card.onclick = () => openMeeting(m.id);
+                
+                let statusColor = '#8b949e';
+                if (m.status === 'running') statusColor = varColor('--success-color');
+                if (m.status === 'finished') statusColor = varColor('--danger-color');
+
+                card.innerHTML = `
+                    <div class="card-title">${m.title}</div>
+                    <div class="card-meta">
+                        <span class="status-pill" style="background:${statusColor}">${translateStatus(m.status)}</span>
+                        <span>龙虾: ${m.agent_count}</span>
+                    </div>
+                    <div style="font-size:0.7rem; color:var(--text-secondary)">邀请码:</div>
+                    <div class="invite-badge" style="text-align:center">${m.invite_code}</div>
+                `;
+                grid.appendChild(card);
+            });
+            document.getElementById('display-user-name').textContent = currentUser.name;
+        }
+
+        function showCreateModal() { document.getElementById('modal-create').classList.remove('hidden'); }
+        function closeCreateModal() { document.getElementById('modal-create').classList.add('hidden'); }
+
+        async function handleCreateMeeting() {
+            const title = document.getElementById('new-title').value;
+            const topic = document.getElementById('new-topic').value;
+            const max_rounds = document.getElementById('new-rounds').value;
             
+            const res = await fetch(`${API_BASE}/api/meetings`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+                body: JSON.stringify({title, topic, max_rounds})
+            });
+            if (res.ok) {
+                closeCreateModal();
+                loadMeetings();
+            }
+        }
+
+        // --- 会议控制台 ---
+        async function openMeeting(id) {
+            currentMeetingId = id;
+            showPage('detail');
+            setupSSE(id);
+            refreshMeetingData();
+        }
+
+        async function refreshMeetingData() {
+            const res = await fetch(`${API_BASE}/api/meetings/${currentMeetingId}`, {
+                headers: {'Authorization': `Bearer ${token}`}
+            });
+            const m = await res.json();
+            
+            document.getElementById('detail-title').textContent = m.title;
+            document.getElementById('set-topic').value = m.topic;
+            document.getElementById('set-rounds').value = m.max_rounds;
+            document.getElementById('detail-invite-code').textContent = m.invite_code;
+            document.querySelectorAll('.invite-placeholder').forEach(el => el.textContent = m.invite_code);
+            
+            // Agents
+            const list = document.getElementById('agent-list');
+            const select = document.getElementById('set-host');
             list.innerHTML = '';
             select.innerHTML = '<option value="">选择主持人</option>';
             
-            data.agents.forEach(agent => {
-                if (!agentColors[agent.name]) {
-                    agentColors[agent.name] = `color-${colorIndex % 5}`;
-                    colorIndex++;
-                }
-                
-                const item = document.createElement('div');
-                item.className = 'agent-item';
-                item.innerHTML = `
-                    <div class="agent-avatar">${getEmoji(agent.role)}</div>
-                    <div class="agent-info">
-                        <div class="name">${agent.name}</div>
-                        <div class="role">${agent.role}</div>
+            m.agents.forEach(a => {
+                const div = document.createElement('div');
+                div.className = 'agent-item';
+                div.innerHTML = `
+                    <div class="agent-avatar">${getEmoji(a.role)}</div>
+                    <div>
+                        <div class="agent-name">${a.name}</div>
+                        <div class="agent-role">${a.role}</div>
                     </div>
                 `;
-                list.appendChild(item);
+                list.appendChild(div);
 
                 const opt = document.createElement('option');
-                opt.value = agent.name;
-                opt.textContent = agent.name;
-                if (agent.name === data.moderator) opt.selected = true;
+                opt.value = a.name;
+                opt.textContent = a.name;
+                if (a.name === m.host_agent) opt.selected = true;
                 select.appendChild(opt);
             });
+            document.getElementById('agent-count').textContent = m.agents.length;
 
-            // Update Status
-            const badge = document.getElementById('statusBadge');
-            badge.textContent = data.status || '未创建';
-            if (data.status === 'running') badge.style.background = '#238636';
-            else if (data.status === 'finished') badge.style.background = '#da3633';
-            
-            document.getElementById('meetingTopic').textContent = data.topic || '等待创建会议...';
-            document.getElementById('roundInfo').textContent = `轮次: ${data.current_round || 0} / ${data.max_rounds || 0}`;
-            
-            document.getElementById('startBtn').disabled = !data.topic || data.status === 'running' || data.status === 'finished';
+            // Controls
+            updateControlUI(m.status);
         }
 
-        function getEmoji(role) {
-            if (role.includes('产品')) return '📋';
-            if (role.includes('架构')) return '🏗️';
-            if (role.includes('前端')) return '🎨';
-            if (role.includes('后端')) return '⚙️';
-            return '🤖';
+        function updateControlUI(status) {
+            document.getElementById('btn-start-meeting').classList.add('hidden');
+            document.getElementById('meeting-running-hint').classList.add('hidden');
+            document.getElementById('meeting-finished-hint').classList.add('hidden');
+            
+            if (status === 'waiting') document.getElementById('btn-start-meeting').classList.remove('hidden');
+            else if (status === 'running') document.getElementById('meeting-running-hint').classList.remove('hidden');
+            else if (status === 'finished') document.getElementById('meeting-finished-hint').classList.remove('hidden');
         }
 
-        async function createMeeting() {
-            const topic = document.getElementById('topicInput').value;
-            const rounds = parseInt(document.getElementById('roundsInput').value);
+        async function saveSettings() {
+            const topic = document.getElementById('set-topic').value;
+            const max_rounds = document.getElementById('set-rounds').value;
+            const host_agent = document.getElementById('set-host').value;
             
-            const res = await fetch(`${API_BASE}/api/meeting/create`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({topic, max_rounds: rounds})
+            await fetch(`${API_BASE}/api/meetings/${currentMeetingId}`, {
+                method: 'PATCH',
+                headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+                body: JSON.stringify({topic, max_rounds, host_agent})
             });
-            const data = await res.json();
-            if (data.success) {
-                fetchStatus();
-                setupSSE();
-                document.getElementById('messageFlow').innerHTML = '';
-            }
+            alert('保存成功');
         }
 
         async function startMeeting() {
-            const host = document.getElementById('hostSelect').value;
+            const host = document.getElementById('set-host').value;
             if (!host) return alert('请先选择主持人');
-
-            await fetch(`${API_BASE}/api/meeting/set_host`, {
+            
+            const res = await fetch(`${API_BASE}/api/meetings/${currentMeetingId}/start`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({agent_name: host})
+                headers: {'Authorization': `Bearer ${token}`}
             });
-
-            const res = await fetch(`${API_BASE}/api/meeting/start`, {method: 'POST'});
             const data = await res.json();
-            if (data.success) fetchStatus();
+            if (data.success) updateControlUI('running');
+            else alert(data.message);
         }
 
-        function setupSSE() {
-            if (eventSource) eventSource.close();
-            eventSource = new EventSource(`${API_BASE}/api/meeting/stream`);
-            
-            eventSource.onmessage = function(e) {
+        function setupSSE(id) {
+            if (sse) sse.close();
+            document.getElementById('stream-flow').innerHTML = '';
+            sse = new EventSource(`${API_BASE}/api/meetings/${id}/stream`);
+            sse.onmessage = (e) => {
                 const data = JSON.parse(e.data);
-                handleMessage(data);
+                handleStreamMsg(data);
             };
         }
 
-        function handleMessage(data) {
-            const flow = document.getElementById('messageFlow');
-            
+        function handleStreamMsg(data) {
+            const flow = document.getElementById('stream-flow');
             if (data.type === 'speech') {
-                const msg = document.createElement('div');
-                msg.className = `message-item ${agentColors[data.agent] || ''}`;
-                msg.innerHTML = `
-                    <div class="message-header">
-                        <span class="name">${data.agent}</span>
-                        <span class="role">${data.role}</span>
+                const div = document.createElement('div');
+                div.className = 'msg-item';
+                div.innerHTML = `
+                    <div class="msg-header">
+                        <span class="msg-author">${data.agent}</span>
+                        <span class="msg-tag">${data.role}</span>
                     </div>
-                    <div class="message-content">${data.content}</div>
+                    <div class="msg-content">${data.content}</div>
                 `;
-                flow.appendChild(msg);
+                flow.appendChild(div);
+                flow.scrollTop = flow.scrollHeight;
             } else if (data.type === 'round_start') {
                 const div = document.createElement('div');
-                div.className = 'round-divider';
-                div.innerHTML = `<span>第 ${data.round} 轮发言开始</span>`;
+                div.className = 'msg-divider';
+                div.innerHTML = `<span>第 ${data.round} 轮讨论</span>`;
                 flow.appendChild(div);
-            } else if (data.type === 'meeting_end') {
-                const div = document.createElement('div');
-                div.className = 'conclude-banner';
-                div.textContent = `会议结束：${data.reason}`;
-                flow.appendChild(div);
-                fetchStatus();
             } else if (data.type === 'agent_registered') {
-                fetchStatus();
-            }
-            
-            flow.scrollTop = flow.scrollHeight;
-            
-            // Increment rounds in UI if needed
-            if (data.round) {
-                const rInfo = document.getElementById('roundInfo');
-                const parts = rInfo.textContent.split(' / ');
-                rInfo.textContent = `轮次: ${data.round} / ${parts[1]}`;
+                refreshMeetingData();
+            } else if (data.type === 'meeting_end') {
+                updateControlUI('finished');
+                const div = document.createElement('div');
+                div.style = "text-align:center; padding:20px; color:var(--text-secondary)";
+                div.textContent = `--- 会议结束：${data.reason} ---`;
+                flow.appendChild(div);
             }
         }
 
-        // Init
-        fetchStatus();
-        setupSSE();
-        setInterval(fetchStatus, 5000);
+        // --- Helpers ---
+        function showPage(p) {
+            document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+            document.getElementById(`page-${p}`).classList.add('active');
+        }
+        function goBack() { showPage('list'); loadMeetings(); if(sse) sse.close(); }
+        function translateStatus(s) {
+            return {waiting:'等待中', running:'进行中', finished:'已结束'}[s] || s;
+        }
+        function varColor(name) { return getComputedStyle(document.documentElement).getPropertyValue(name); }
+        function getEmoji(role) {
+            const r = role.toLowerCase();
+            if (r.includes('架构')) return '🏗️';
+            if (r.includes('前端')) return '🎨';
+            if (r.includes('后端')) return '⚙️';
+            if (r.includes('产品')) return '📋';
+            if (r.includes('测试')) return '🧪';
+            return '🤖';
+        }
+        function toggleCode() { document.getElementById('join-code-box').classList.toggle('hidden'); }
+        function copyInvite() {
+            const code = document.getElementById('detail-invite-code').textContent;
+            navigator.clipboard.writeText(code);
+            alert('已复制: ' + code);
+        }
+
+        // Init Check
+        (async () => {
+            if (token) {
+                try {
+                    const res = await fetch(`${API_BASE}/api/auth/me`, {headers: {'Authorization': `Bearer ${token}`}});
+                    if (res.ok) {
+                        currentUser = await res.json();
+                        showPage('list');
+                        loadMeetings();
+                    } else logout();
+                } catch(e) { logout(); }
+            }
+        })();
     </script>
 </body>
 </html>

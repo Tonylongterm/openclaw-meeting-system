@@ -1,10 +1,11 @@
 import time
 import threading
-import queue
 from agents import ModeratorAgent, ParticipantAgent
 
-class MeetingEngine:
-    def __init__(self, topic, max_rounds=5):
+class MeetingRoom:
+    def __init__(self, meeting_id, title, topic, max_rounds=5):
+        self.id = meeting_id
+        self.title = title
         self.topic = topic
         self.max_rounds = max_rounds
         self.agents = []
@@ -30,11 +31,10 @@ class MeetingEngine:
 
     def register_agent(self, agent):
         with self._lock:
-            # Avoid duplicate registration
             if any(a.name == agent.name for a in self.agents):
                 return False
             self.agents.append(agent)
-            print(f"[*] Agent {agent.name} ({agent.role}) 注册成功。")
+            self._broadcast("agent_registered", name=agent.name, role=agent.role)
             return True
 
     def set_moderator(self, agent_name):
@@ -42,9 +42,7 @@ class MeetingEngine:
             for agent in self.agents:
                 if agent.name == agent_name:
                     self.moderator = ModeratorAgent(agent.name, agent.role, agent.description)
-                    print(f"[*] 主持人已设定为：{agent.name}")
                     return True
-            print(f"[!] 找不到名为 {agent_name} 的 Agent。")
             return False
 
     def check_consensus(self, speech):
@@ -55,18 +53,12 @@ class MeetingEngine:
 
     def run_meeting(self):
         if not self.moderator:
-            print("[!] 会议无法开始，未设定主持人。")
             return
 
         self.status = "running"
         self.current_round = 0
         
-        print("\n" + "="*50)
-        print(f"【会议开始】主题：{self.topic}")
-        print("="*50 + "\n")
-
         intro_text = self.moderator.introduce(self.topic)
-        print(intro_text)
         self._broadcast("speech", agent=self.moderator.name, role="主持人", content=intro_text, round=0)
         time.sleep(1)
 
@@ -76,7 +68,6 @@ class MeetingEngine:
         for r in range(1, self.max_rounds + 1):
             self.current_round = r
             self._broadcast("round_start", round=r)
-            print(f"\n--- 第 {r} 轮发言 ---")
             round_records = []
             consensus_this_round = 0
 
@@ -85,8 +76,6 @@ class MeetingEngine:
                     continue
                 
                 speech = agent.speak(self.topic, r, round_records)
-                print(f"[{agent.role}] {agent.name}: {speech}")
-                
                 is_consensus = self.check_consensus(speech)
                 if is_consensus:
                     consensus_this_round += 1
@@ -102,12 +91,10 @@ class MeetingEngine:
                 }
                 round_records.append(record)
                 self.records.append(record)
-                time.sleep(1) # Visual delay for stream
+                time.sleep(1)
 
             self._broadcast("round_end", round=r)
             
-            # 判断是否所有参与者都达成共识
-            # 这里的逻辑：参与者总数（agents - 1 if moderator is participant else agents）
             participant_count = len(self.agents) - (1 if self.moderator else 0)
             if participant_count > 0 and consensus_this_round >= participant_count:
                 reached_consensus = True
@@ -116,25 +103,21 @@ class MeetingEngine:
             
             if r < self.max_rounds:
                 wrap_text = self.moderator.wrap_round(r)
-                print(wrap_text)
                 self._broadcast("speech", agent=self.moderator.name, role="主持人", content=wrap_text, round=r)
             
             final_round = r
             time.sleep(0.5)
 
-        print("\n" + "="*50)
         if reached_consensus:
             self.end_reason = "所有参与者达成共识"
         else:
             self.end_reason = f"达到最大轮数限制 ({self.max_rounds} 轮)"
         
         conclude_text = self.moderator.conclude(self.end_reason)
-        print(conclude_text)
         self._broadcast("speech", agent=self.moderator.name, role="主持人", content=conclude_text, round=final_round)
         
         self.status = "finished"
         self._broadcast("meeting_end", reason=self.end_reason)
-        print("="*50 + "\n")
 
     def start_in_background(self):
         thread = threading.Thread(target=self.run_meeting)
