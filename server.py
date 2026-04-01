@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, Response, g
+from flask import Flask, request, jsonify, Response, g, send_from_directory
 from flask_cors import CORS
 import json
 import uuid
@@ -275,9 +275,13 @@ def join_meeting():
 
 @app.route('/')
 def index():
-    return app.send_static_file('index.html')
+    return send_from_directory('static', 'index.html')
+
+@app.route('/app')
+def app_page():
+    return send_from_directory('static', 'app.html')
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 7788))
-    print(f"Starting V2 Meeting Server on 0.0.0.0:{port}")
+    print(f"Starting V3 Meeting Server on 0.0.0.0:{port}")
     app.run(host='0.0.0.0', port=port, threaded=True)
