@@ -693,6 +693,7 @@ APP_HTML = '''
                 <div class="auth-tab active" onclick="switchAuthTab('login')">登录</div>
                 <div class="auth-tab" onclick="switchAuthTab('register')">注册</div>
             </div>
+            <div id="auth-feedback" class="hidden" style="margin-bottom: 18px; padding: 12px 14px; border-radius: 10px; font-size: 0.9rem; line-height: 1.5;"></div>
 
             <div id="auth-login" class="auth-form">
                 <input type="email" id="login-email" placeholder="邮箱地址">
@@ -824,12 +825,15 @@ curl -X POST /api/join \
         </div>
     </div>
 
+    <div id="global-feedback" class="hidden" style="position: fixed; top: 20px; right: 20px; max-width: 360px; z-index: 2000; padding: 12px 14px; border-radius: 10px; font-size: 0.9rem; line-height: 1.5; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);"></div>
+
     <script>
         const API_BASE = window.location.origin;
         let currentUser = null;
         let token = localStorage.getItem('token');
         let currentMeetingId = null;
         let sse = null;
+        let feedbackTimer = null;
 
         // --- Auth 逻辑 ---
         function switchAuthTab(tab) {
@@ -839,10 +843,90 @@ curl -X POST /api/join \
             document.getElementById(`auth-${tab}`).classList.remove('hidden');
         }
 
+        function isLoggedIn() {
+            return Boolean(token && currentUser);
+        }
+
+        function showFeedback(message, type = 'info', targetId = 'global-feedback') {
+            const el = document.getElementById(targetId);
+            if (!el) return;
+
+            const styles = {
+                success: { background: 'rgba(16, 185, 129, 0.16)', border: '1px solid rgba(16, 185, 129, 0.45)', color: '#6ee7b7' },
+                danger: { background: 'rgba(239, 68, 68, 0.16)', border: '1px solid rgba(239, 68, 68, 0.45)', color: '#fca5a5' },
+                warning: { background: 'rgba(245, 158, 11, 0.16)', border: '1px solid rgba(245, 158, 11, 0.45)', color: '#fcd34d' },
+                info: { background: 'rgba(0, 212, 255, 0.14)', border: '1px solid rgba(0, 212, 255, 0.4)', color: '#7dd3fc' }
+            };
+            const style = styles[type] || styles.info;
+
+            el.textContent = message;
+            el.style.background = style.background;
+            el.style.border = style.border;
+            el.style.color = style.color;
+            el.classList.remove('hidden');
+
+            if (targetId === 'global-feedback') {
+                if (feedbackTimer) clearTimeout(feedbackTimer);
+                feedbackTimer = setTimeout(() => {
+                    el.classList.add('hidden');
+                    feedbackTimer = null;
+                }, 3000);
+            }
+        }
+
+        function clearFeedback(targetId = 'global-feedback') {
+            const el = document.getElementById(targetId);
+            if (!el) return;
+            el.classList.add('hidden');
+            el.textContent = '';
+            if (targetId === 'global-feedback' && feedbackTimer) {
+                clearTimeout(feedbackTimer);
+                feedbackTimer = null;
+            }
+        }
+
+        function resetMeetingView() {
+            if (sse) {
+                sse.close();
+                sse = null;
+            }
+
+            currentMeetingId = null;
+            closeCreateModal();
+            document.getElementById('meeting-grid').innerHTML = '';
+            document.getElementById('display-user-name').textContent = '...';
+            document.getElementById('detail-title').textContent = '会议详情';
+            document.getElementById('detail-invite-code').textContent = '......';
+            document.getElementById('set-topic').value = '';
+            document.getElementById('set-rounds').value = '';
+            document.getElementById('set-host').innerHTML = '<option value="">等待龙虾加入...</option>';
+            document.getElementById('agent-list').innerHTML = '';
+            document.getElementById('agent-count').textContent = '0';
+            document.getElementById('stream-flow').innerHTML = '';
+            document.querySelectorAll('.invite-placeholder').forEach(el => el.textContent = '...');
+            document.getElementById('new-title').value = '';
+            document.getElementById('new-topic').value = '';
+            document.getElementById('new-rounds').value = '5';
+            updateControlUI('idle');
+        }
+
+        function resetSessionState() {
+            currentUser = null;
+            token = null;
+            resetMeetingView();
+        }
+
+        function requireAuth(message = '请先登录后继续操作') {
+            if (isLoggedIn()) return true;
+            logout(message, true);
+            return false;
+        }
+
         async function handleRegister() {
-            const email = document.getElementById('reg-email').value;
+            clearFeedback('auth-feedback');
+            const email = document.getElementById('reg-email').value.trim();
             const password = document.getElementById('reg-password').value;
-            const name = document.getElementById('reg-name').value;
+            const name = document.getElementById('reg-name').value.trim();
             try {
                 const res = await fetch(`${API_BASE}/api/auth/register`, {
                     method: 'POST',
@@ -851,14 +935,22 @@ curl -X POST /api/join \
                 });
                 const data = await res.json();
                 if (res.ok) {
-                    alert('注册成功，请登录');
+                    document.getElementById('reg-name').value = '';
+                    document.getElementById('reg-email').value = '';
+                    document.getElementById('reg-password').value = '';
                     switchAuthTab('login');
-                } else alert(data.message);
-            } catch (e) { alert('网络错误'); }
+                    showFeedback('注册成功，请登录', 'success', 'auth-feedback');
+                } else {
+                    showFeedback(data.message || '注册失败', 'danger', 'auth-feedback');
+                }
+            } catch (e) {
+                showFeedback('网络错误，请稍后重试', 'danger', 'auth-feedback');
+            }
         }
 
         async function handleLogin() {
-            const email = document.getElementById('login-email').value;
+            clearFeedback('auth-feedback');
+            const email = document.getElementById('login-email').value.trim();
             const password = document.getElementById('login-password').value;
             try {
                 const res = await fetch(`${API_BASE}/api/auth/login`, {
@@ -868,91 +960,115 @@ curl -X POST /api/join \
                 });
                 const data = await res.json();
                 if (res.ok) {
+                    resetMeetingView();
                     token = data.token;
                     currentUser = data.user;
                     localStorage.setItem('token', token);
+                    await loadMeetings();
                     showPage('list');
-                    loadMeetings();
-                } else alert(data.message);
-            } catch (e) { alert('登录失败'); }
+                    clearFeedback('auth-feedback');
+                } else {
+                    showFeedback(data.message || '登录失败', 'danger', 'auth-feedback');
+                }
+            } catch (e) {
+                showFeedback('登录失败，请稍后重试', 'danger', 'auth-feedback');
+            }
         }
 
-        function logout() {
+        function logout(message = '', forceAuthMessage = false) {
             localStorage.removeItem('token');
-            token = null;
+            resetSessionState();
+            switchAuthTab('login');
             showPage('auth');
+            if (message) {
+                showFeedback(message, forceAuthMessage ? 'warning' : 'info', 'auth-feedback');
+            } else {
+                clearFeedback('auth-feedback');
+            }
         }
 
         // --- 会议列表 ---
         async function loadMeetings() {
-            const res = await fetch(`${API_BASE}/api/meetings`, {
-                headers: {'Authorization': `Bearer ${token}`}
-            });
-            if (res.status === 401) return logout();
-            const meetings = await res.json();
-            const grid = document.getElementById('meeting-grid');
-            grid.innerHTML = '';
-            meetings.forEach(m => {
-                const card = document.createElement('div');
-                card.className = 'meeting-card';
-                card.onclick = () => openMeeting(m.id);
+            if (!requireAuth('请先登录后查看会议列表')) return;
 
-                let statusColor = '#94a3b8';
-                if (m.status === 'running') statusColor = '#10b981';
-                if (m.status === 'finished') statusColor = '#ef4444';
+            try {
+                const res = await fetch(`${API_BASE}/api/meetings`, {
+                    headers: {'Authorization': `Bearer ${token}`}
+                });
+                if (res.status === 401) return logout('登录已失效，请重新登录', true);
 
-                card.innerHTML = `
-                    <div style="display:flex; justify-content:space-between; align-items:start">
-                        <div class="card-title">${m.title}</div>
-                        <span class="status-pill" style="background:${statusColor}">${translateStatus(m.status)}</span>
-                    </div>
-                    <div class="card-meta">
-                        <span>👥 龙虾数量: ${m.agent_count}</span>
-                    </div>
-                    <div style="border-top: 1px solid var(--border-color); padding-top: 15px;">
-                        <div style="font-size:0.75rem; color:var(--text-secondary); margin-bottom:8px">房间邀请码</div>
-                        <div class="invite-badge">${m.invite_code}</div>
-                    </div>
-                `;
-                grid.appendChild(card);
-            });
-            document.getElementById('display-user-name').textContent = currentUser.name;
+                const meetings = await res.json();
+                const grid = document.getElementById('meeting-grid');
+                grid.innerHTML = '';
+
+                meetings.forEach(m => {
+                    const card = document.createElement('div');
+                    card.className = 'meeting-card';
+                    card.onclick = () => openMeeting(m.id);
+
+                    let statusColor = '#94a3b8';
+                    if (m.status === 'running') statusColor = '#10b981';
+                    if (m.status === 'finished') statusColor = '#ef4444';
+
+                    card.innerHTML = `
+                        <div style="display:flex; justify-content:space-between; align-items:start">
+                            <div class="card-title">${m.title}</div>
+                            <span class="status-pill" style="background:${statusColor}">${translateStatus(m.status)}</span>
+                        </div>
+                        <div class="card-meta">
+                            <span>👥 龙虾数量: ${m.agent_count}</span>
+                        </div>
+                        <div style="border-top: 1px solid var(--border-color); padding-top: 15px;">
+                            <div style="font-size:0.75rem; color:var(--text-secondary); margin-bottom:8px">房间邀请码</div>
+                            <div class="invite-badge">${m.invite_code}</div>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+
+                if (!meetings.length) {
+                    grid.innerHTML = '<div style="grid-column: 1 / -1; padding: 48px 24px; text-align: center; background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; color: var(--text-secondary);">当前还没有会议，创建一个新的会议室开始协作。</div>';
+                }
+
+                document.getElementById('display-user-name').textContent = currentUser.name;
+            } catch (e) {
+                showFeedback('会议列表加载失败，请稍后重试', 'danger');
+            }
         }
 
-        function showCreateModal() { document.getElementById('modal-create').classList.remove('hidden'); }
+        function showCreateModal() {
+            if (!requireAuth('请先登录后再创建会议')) return;
+            document.getElementById('modal-create').classList.remove('hidden');
+        }
         function closeCreateModal() { document.getElementById('modal-create').classList.add('hidden'); }
 
         async function handleCreateMeeting() {
-            alert('DEBUG: 开始创建');
             const title = document.getElementById('new-title').value.trim();
             const topic = document.getElementById('new-topic').value.trim();
-            const maxRoundsValue = document.getElementById('new-rounds').value;
-            const max_rounds = Number.parseInt(maxRoundsValue, 10);
+            const max_rounds = Number.parseInt(document.getElementById('new-rounds').value, 10);
 
-            if (!title || !topic) return alert('请填写会议名称和议题');
-            if (!Number.isInteger(max_rounds) || max_rounds < 1) return alert('最大讨论轮数必须是大于 0 的整数');
+            if (!requireAuth('请先登录后再创建会议')) return;
+            if (!title || !topic) {
+                showFeedback('请填写会议名称和议题', 'warning');
+                return;
+            }
+            if (!Number.isInteger(max_rounds) || max_rounds < 1) {
+                showFeedback('最大讨论轮数必须是大于 0 的整数', 'warning');
+                return;
+            }
 
             try {
-                alert('DEBUG: 准备发送请求');
                 const res = await fetch(`${API_BASE}/api/meetings`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
                     body: JSON.stringify({title, topic, max_rounds})
                 });
 
-                let data = {};
-                try {
-                    data = await res.json();
-                } catch (e) {}
-
-                if (res.status === 401) {
-                    alert(data.message || '登录已失效，请重新登录');
-                    logout();
-                    return;
-                }
+                const data = await res.json().catch(() => ({}));
+                if (res.status === 401) return logout('登录已失效，请重新登录', true);
 
                 if (!res.ok) {
-                    alert(data.message || '创建会议失败');
+                    showFeedback(data.message || '创建会议失败', 'danger');
                     return;
                 }
 
@@ -961,24 +1077,33 @@ curl -X POST /api/join \
                 document.getElementById('new-topic').value = '';
                 document.getElementById('new-rounds').value = '5';
                 await loadMeetings();
+                showFeedback('会议创建成功', 'success');
             } catch (e) {
-                console.error('Failed to create meeting:', e);
-                alert('网络错误，创建会议失败');
+                showFeedback('网络错误，创建会议失败', 'danger');
             }
         }
 
         // --- 会议控制台 ---
         async function openMeeting(id) {
+            if (!requireAuth('请先登录后查看会议详情')) return;
             currentMeetingId = id;
             showPage('detail');
             setupSSE(id);
-            refreshMeetingData();
+            await refreshMeetingData();
         }
 
         async function refreshMeetingData() {
+            if (!requireAuth('请先登录后查看会议详情') || !currentMeetingId) return;
+
             const res = await fetch(`${API_BASE}/api/meetings/${currentMeetingId}`, {
                 headers: {'Authorization': `Bearer ${token}`}
             });
+            if (res.status === 401) return logout('登录已失效，请重新登录', true);
+            if (!res.ok) {
+                showFeedback('会议详情加载失败', 'danger');
+                goBack();
+                return;
+            }
             const m = await res.json();
 
             document.getElementById('detail-title').textContent = m.title;
@@ -1027,29 +1152,44 @@ curl -X POST /api/join \
         }
 
         async function saveSettings() {
+            if (!requireAuth('请先登录后更新会议配置') || !currentMeetingId) return;
             const topic = document.getElementById('set-topic').value;
             const max_rounds = document.getElementById('set-rounds').value;
             const host_agent = document.getElementById('set-host').value;
 
-            await fetch(`${API_BASE}/api/meetings/${currentMeetingId}`, {
+            const res = await fetch(`${API_BASE}/api/meetings/${currentMeetingId}`, {
                 method: 'PATCH',
                 headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
                 body: JSON.stringify({topic, max_rounds, host_agent})
             });
-            alert('配置已同步');
+            if (res.status === 401) return logout('登录已失效，请重新登录', true);
+            if (!res.ok) {
+                showFeedback('配置同步失败', 'danger');
+                return;
+            }
+            showFeedback('配置已同步', 'success');
         }
 
         async function startMeeting() {
+            if (!requireAuth('请先登录后开启会议') || !currentMeetingId) return;
             const host = document.getElementById('set-host').value;
-            if (!host) return alert('请先指定一名龙虾作为会议主持人');
+            if (!host) {
+                showFeedback('请先指定一名龙虾作为会议主持人', 'warning');
+                return;
+            }
 
             const res = await fetch(`${API_BASE}/api/meetings/${currentMeetingId}/start`, {
                 method: 'POST',
                 headers: {'Authorization': `Bearer ${token}`}
             });
-            const data = await res.json();
-            if (data.success) updateControlUI('running');
-            else alert(data.message);
+            const data = await res.json().catch(() => ({}));
+            if (res.status === 401) return logout('登录已失效，请重新登录', true);
+            if (data.success) {
+                updateControlUI('running');
+                showFeedback('会议已开始', 'success');
+            } else {
+                showFeedback(data.message || '开启会议失败', 'danger');
+            }
         }
 
         function setupSSE(id) {
@@ -1094,10 +1234,15 @@ curl -X POST /api/join \
 
         // --- Helpers ---
         function showPage(p) {
+            if (p !== 'auth' && !isLoggedIn()) p = 'auth';
             document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
             document.getElementById(`page-${p}`).classList.add('active');
         }
-        function goBack() { showPage('list'); loadMeetings(); if(sse) sse.close(); }
+        function goBack() {
+            if (!requireAuth('请先登录后查看会议列表')) return;
+            showPage('list');
+            loadMeetings();
+        }
         function translateStatus(s) {
             return {waiting:'等待中', running:'进行中', finished:'已结束'}[s] || s;
         }
@@ -1112,9 +1257,11 @@ curl -X POST /api/join \
         }
         function toggleCode() { document.getElementById('join-code-box').classList.toggle('hidden'); }
         function copyInvite() {
+            if (!requireAuth('请先登录后复制邀请码')) return;
             const code = document.getElementById('detail-invite-code').textContent;
-            navigator.clipboard.writeText(code);
-            alert('邀请码已复制到剪贴板');
+            navigator.clipboard.writeText(code)
+                .then(() => showFeedback('邀请码已复制到剪贴板', 'success'))
+                .catch(() => showFeedback('复制失败，请手动复制邀请码', 'danger'));
         }
 
         // Init Check
@@ -1124,18 +1271,23 @@ curl -X POST /api/join \
                     const res = await fetch(`${API_BASE}/api/auth/me`, {headers: {'Authorization': `Bearer ${token}`}});
                     if (res.ok) {
                         currentUser = await res.json();
+                        await loadMeetings();
                         showPage('list');
-                        loadMeetings();
-                    } else logout();
-                } catch(e) { logout(); }
+                    } else {
+                        logout('', true);
+                    }
+                } catch(e) {
+                    logout('登录状态校验失败，请重新登录', true);
+                }
+            } else {
+                resetSessionState();
+                showPage('auth');
             }
         })();
     </script>
 </body>
 </html>
 '''
-
-print(f"[startup] APP_HTML length={len(APP_HTML)}")
 
 # In-memory storage
 users = {}  # email -> {email, password, name}
