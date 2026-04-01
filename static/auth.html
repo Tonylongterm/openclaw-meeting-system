@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset='UTF-8'>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenClaw Meeting - 登录或注册</title>
+    <style>
+        :root {
+            --bg-color: #050a10;
+            --panel-bg: #0d1f2d;
+            --border-color: #1e293b;
+            --text-primary: #ffffff;
+            --text-secondary: #94a3b8;
+            --accent-color: #00d4ff;
+            --success-color: #10b981;
+            --danger-color: #ef4444;
+            --warning-color: #f59e0b;
+            --version: #ff2b2b;
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background:
+                radial-gradient(circle at top, rgba(0, 212, 255, 0.16), transparent 30%),
+                var(--bg-color);
+            color: var(--text-primary);
+            margin: 0;
+            min-height: 100vh;
+            padding: 32px 16px;
+        }
+
+        .version-banner {
+            width: min(420px, 100%);
+            margin: 0 auto 20px;
+            padding: 12px 16px;
+            text-align: center;
+            font-size: 26px;
+            font-weight: 900;
+            color: var(--version);
+            background: rgba(0, 0, 0, 0.84);
+            border: 2px solid rgba(255, 43, 43, 0.58);
+            border-radius: 14px;
+        }
+
+        .auth-container {
+            width: 100%;
+            max-width: 420px;
+            margin: 0 auto;
+            padding: 40px;
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+        }
+
+        .auth-back { display: inline-block; margin-bottom: 20px; color: var(--text-secondary); text-decoration: none; }
+        .auth-tabs { display: flex; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); }
+        .auth-tab {
+            flex: 1;
+            text-align: center;
+            padding: 12px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            background: transparent;
+            border: 0;
+            font: inherit;
+        }
+        .auth-tab.active { color: var(--accent-color); border-bottom: 2px solid var(--accent-color); }
+        .auth-form { display: flex; flex-direction: column; gap: 15px; }
+        .hidden { display: none; }
+
+        input {
+            background: #000;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 12px;
+            border-radius: 10px;
+            outline: none;
+        }
+
+        button {
+            cursor: pointer;
+            border: 0;
+            border-radius: 10px;
+            padding: 12px 18px;
+            font-weight: 700;
+        }
+
+        .btn-primary { background: var(--accent-color); color: #000; }
+    </style>
+</head>
+<body>
+    <div class="version-banner">VER: 23:35_FINAL</div>
+
+    <div class="auth-container">
+        <a href="/" class="auth-back">← 返回主页</a>
+        <h1 style="text-align: center; color: var(--accent-color); margin: 0 0 30px;">🦞 OpenClaw Meeting</h1>
+        <div class="auth-tabs">
+            <button class="auth-tab active" data-auth-tab="login" onclick="switchAuthTab('login')">登录</button>
+            <button class="auth-tab" data-auth-tab="register" onclick="switchAuthTab('register')">注册</button>
+        </div>
+        <div id="auth-feedback" class="hidden" style="margin-bottom: 18px; padding: 12px 14px; border-radius: 10px; font-size: 14px; line-height: 1.5;"></div>
+
+        <div id="auth-login" class="auth-form">
+            <input type="email" id="login-email" placeholder="邮箱地址">
+            <input type="password" id="login-password" placeholder="密码">
+            <button class="btn-primary" onclick="handleLogin()">登录控制台</button>
+        </div>
+
+        <div id="auth-register" class="auth-form hidden">
+            <input type="text" id="reg-name" placeholder="您的姓名">
+            <input type="email" id="reg-email" placeholder="电子邮箱">
+            <input type="password" id="reg-password" placeholder="设置密码">
+            <button class="btn-primary" onclick="handleRegister()" style="background: var(--success-color);">免费注册</button>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        let currentAuthTab = new URLSearchParams(window.location.search).get('auth') === 'register' ? 'register' : 'login';
+
+        function setDisplay(id, visible, displayValue = 'block') {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.style.display = visible ? displayValue : 'none';
+        }
+
+        function switchAuthTab(tab) {
+            currentAuthTab = tab === 'register' ? 'register' : 'login';
+            document.querySelectorAll('.auth-tab').forEach((node) => {
+                node.classList.toggle('active', node.dataset.authTab === currentAuthTab);
+            });
+            setDisplay('auth-login', currentAuthTab === 'login', 'flex');
+            setDisplay('auth-register', currentAuthTab === 'register', 'flex');
+
+            const url = new URL(window.location.href);
+            url.searchParams.set('auth', currentAuthTab);
+            window.history.replaceState({}, '', url);
+        }
+
+        function showFeedback(message, type = 'info') {
+            const el = document.getElementById('auth-feedback');
+            if (!el) return;
+
+            const styles = {
+                success: { background: 'rgba(16, 185, 129, 0.16)', border: '1px solid rgba(16, 185, 129, 0.45)', color: '#6ee7b7' },
+                danger: { background: 'rgba(239, 68, 68, 0.16)', border: '1px solid rgba(239, 68, 68, 0.45)', color: '#fca5a5' },
+                warning: { background: 'rgba(245, 158, 11, 0.16)', border: '1px solid rgba(245, 158, 11, 0.45)', color: '#fcd34d' },
+                info: { background: 'rgba(0, 212, 255, 0.14)', border: '1px solid rgba(0, 212, 255, 0.4)', color: '#7dd3fc' }
+            };
+            const style = styles[type] || styles.info;
+
+            el.textContent = message;
+            el.style.background = style.background;
+            el.style.border = style.border;
+            el.style.color = style.color;
+            el.classList.remove('hidden');
+        }
+
+        function clearFeedback() {
+            const el = document.getElementById('auth-feedback');
+            if (!el) return;
+            el.classList.add('hidden');
+            el.textContent = '';
+        }
+
+        async function handleRegister() {
+            clearFeedback();
+            const email = document.getElementById('reg-email').value.trim();
+            const password = document.getElementById('reg-password').value;
+            const name = document.getElementById('reg-name').value.trim();
+            try {
+                const res = await fetch(`${API_BASE}/api/auth/register`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({email, password, name})
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok) {
+                    document.getElementById('reg-name').value = '';
+                    document.getElementById('reg-email').value = '';
+                    document.getElementById('reg-password').value = '';
+                    switchAuthTab('login');
+                    showFeedback('注册成功，请登录', 'success');
+                } else {
+                    showFeedback(data.message || '注册失败', 'danger');
+                }
+            } catch (error) {
+                showFeedback('网络错误，请稍后重试', 'danger');
+            }
+        }
+
+        async function handleLogin() {
+            clearFeedback();
+            const email = document.getElementById('login-email').value.trim();
+            const password = document.getElementById('login-password').value;
+            try {
+                const res = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({email, password})
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok) {
+                    localStorage.setItem('token', data.token);
+                    window.location.href = '/app';
+                } else {
+                    showFeedback(data.message || '登录失败', 'danger');
+                }
+            } catch (error) {
+                showFeedback('登录失败，请稍后重试', 'danger');
+            }
+        }
+
+        function syncTabFromLocation() {
+            const auth = new URLSearchParams(window.location.search).get('auth');
+            switchAuthTab(auth === 'register' ? 'register' : 'login');
+        }
+
+        window.addEventListener('popstate', syncTabFromLocation);
+        syncTabFromLocation();
+    </script>
+</body>
+</html>
