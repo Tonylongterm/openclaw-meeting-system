@@ -12,7 +12,10 @@ from functools import wraps
 from agents import ParticipantAgent
 from meeting_system import MeetingRoom
 
-app = Flask(__name__)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, 'static')
+
+app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='/static')
 CORS(app)
 
 SECRET_KEY = "openclaw-meeting-secret-2024"
@@ -275,11 +278,11 @@ def join_meeting():
 
 @app.route('/')
 def index():
-    return send_from_directory('static', 'index.html')
+    return send_from_directory(app.static_folder, 'index.html')
 
 @app.route('/app')
 def app_page():
-    return send_from_directory('static', 'app.html')
+    return send_from_directory(app.static_folder, 'app.html')
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 7788))
