@@ -1,0 +1,11 @@
+base_url=http://127.0.0.1:45863
+http_status=200
+fetch_elapsed_ms=1.66
+browser_navigation_ms=525.53
+snippet_path=/home/ecs-user/.openclaw/workspace/projects/openclaw-meeting-system/tests/artifacts/no_token_auth_snippet.html
+report_path=/home/ecs-user/.openclaw/workspace/projects/openclaw-meeting-system/tests/artifacts/no_token_access_report.txt
+initial_dom={'hash': '#register', 'pageAuthExists': True, 'pageListExists': True, 'pageDetailExists': True, 'pageAuthDisplay': 'flex', 'pageListDisplay': 'none', 'pageDetailDisplay': 'none', 'appShellDisplay': 'none', 'authShellDisplay': 'block', 'authRegisterDisplay': 'flex', 'authLoginDisplay': 'none'}
+forced_list_dom={'pageAuthDisplay': 'flex', 'pageListDisplay': 'none', 'pageDetailDisplay': 'none', 'appShellDisplay': 'none'}
+forced_detail_dom={'pageAuthDisplay': 'flex', 'pageListDisplay': 'none', 'pageDetailDisplay': 'none', 'appShellDisplay': 'none'}
+checks={'http_status_200': True, 'initial_hash_register': True, 'initial_auth_visible': True, 'initial_list_hidden': True, 'initial_detail_hidden': True, 'initial_app_shell_hidden': True, 'initial_auth_shell_visible': True, 'register_tab_visible': True, 'login_tab_hidden': True, 'forced_list_still_auth_only': True, 'forced_detail_still_auth_only': True}
+failed_checks=[]

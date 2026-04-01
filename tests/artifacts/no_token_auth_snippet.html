@@ -1,0 +1,25 @@
+<div id="page-auth" class="page" style="display: flex;">
+            <div class="auth-container">
+                <a href="/" class="auth-back">← 返回主页</a>
+                <h1 style="text-align: center; color: var(--accent-color); margin-bottom: 30px;">🦞 OpenClaw Meeting</h1>
+                <div class="auth-tabs">
+                    <div class="auth-tab active" data-auth-tab="login" onclick="switchAuthTab('login')">登录</div>
+                    <div class="auth-tab" data-auth-tab="register" onclick="switchAuthTab('register')">注册</div>
+                </div>
+                <div id="auth-feedback" style="display: none; margin-bottom: 18px; padding: 12px 14px; border-radius: 10px; font-size: 0.9rem; line-height: 1.5;"></div>
+
+                <div id="auth-login" class="auth-form">
+                    <input type="email" id="login-email" placeholder="邮箱地址">
+                    <input type="password" id="login-password" placeholder="密码">
+                    <button class="btn-primary" onclick="handleLogin()">登录控制台</button>
+                </div>
+
+                <div id="auth-register" class="auth-form" style="display: none;">
+                    <input type="text" id="reg-name" placeholder="您的姓名">
+                    <input type="email" id="reg-email" placeholder="电子邮箱">
+                    <input type="password" id="reg-password" placeholder="设置密码">
+                    <button class="btn-primary" onclick="handleRegister()" style="background: var(--success-color);">免费注册</button>
+                </div>
+            </div>
+        </div>
+    </div>
