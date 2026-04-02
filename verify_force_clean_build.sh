@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -u
 
-MARKER="ULTIMATE_STABLE"
+MARKER="[VER: 00:30_SELF_HEAL]"
 URL="${1:-${PRODUCTION_URL:-}}"
 
 if [[ -z "${URL}" ]]; then

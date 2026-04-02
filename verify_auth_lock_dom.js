@@ -1,54 +1,39 @@
-const fs = require('fs');
-const path = require('path');
-const {JSDOM} = require('jsdom');
+const { JSDOM } = require('jsdom');
 
-async function main() {
-    const htmlPath = path.join(__dirname, 'static', 'app.html');
-    const html = fs.readFileSync(htmlPath, 'utf8');
-    const dom = new JSDOM(html, {
-        url: 'http://localhost/app?auth=register',
-        runScripts: 'dangerously',
-        resources: 'usable',
-        pretendToBeVisual: true,
-        beforeParse(window) {
-            window.fetch = async () => ({
-                ok: false,
-                status: 500,
-                json: async () => ({})
-            });
-            window.EventSource = function MockEventSource() {};
-            window.navigator.clipboard = {
-                writeText: async () => undefined
-            };
+async function testNoTokenAccess() {
+    const url = 'http://localhost:7788/portal?auth=register';
+    console.log(`Testing access to ${url} without token...`);
+
+    try {
+        const response = await fetch(url);
+        const html = await response.text();
+        const dom = new JSDOM(html);
+        const document = dom.window.document;
+
+        // 验证标题
+        console.log('Document Title:', document.title);
+        
+        // 核心检查：是否包含控制台特有的 ID 或元素
+        const appShell = document.getElementById('app-shell');
+        const meetingGrid = document.getElementById('meeting-grid');
+        const streamFlow = document.getElementById('stream-flow');
+
+        console.log('Checking for console elements...');
+        let leaked = false;
+        if (appShell) { console.error('FAILED: Found #app-shell'); leaked = true; }
+        if (meetingGrid) { console.error('FAILED: Found #meeting-grid'); leaked = true; }
+        if (streamFlow) { console.error('FAILED: Found #stream-flow'); leaked = true; }
+
+        if (!leaked) {
+            console.log('SUCCESS: DOM structure is clean. No console elements found.');
+        } else {
+            process.exit(1);
         }
-    });
 
-    await new Promise((resolve) => {
-        dom.window.addEventListener('load', () => {
-            dom.window.setTimeout(resolve, 0);
-        });
-    });
-
-    const {document} = dom.window;
-    const elementCount = document.body.querySelectorAll('*').length;
-    const ids = Array.from(document.body.querySelectorAll('[id]')).map((node) => node.id);
-
-    console.log(JSON.stringify({
-        url: dom.window.location.href,
-        elementCount,
-        bodyChildren: Array.from(document.body.children).map((node) => node.tagName.toLowerCase()),
-        ids
-    }, null, 2));
-
-    if (elementCount > 10) {
-        console.error(`FAIL: auth init lock left ${elementCount} DOM elements, expected <= 10`);
+    } catch (error) {
+        console.error('Test failed due to network or server error:', error.message);
         process.exit(1);
     }
-
-    console.log('PASS: auth init lock removed all non-auth DOM nodes');
 }
 
-main().catch((error) => {
-    console.error(error);
-    process.exit(1);
-});
+testNoTokenAccess();
